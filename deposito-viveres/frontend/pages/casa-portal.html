@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Portal Casa - Depósito de Víveres</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="../assets/css/style.css">
+</head>
+<script>
+// Variables globales necesarias
+const API_BASE_URL = '/deposito-viveres/backend/api';
+let currentUser = null;
+let authToken = null;
+let availableProducts = [];
+let cart = [];
+let userOrders = [];
+
+// Función logout que falta
+function logout() {
+    // Limpiar datos del localStorage
+    localStorage.removeItem('userData');
+    localStorage.removeItem('authToken');
+    // Redirigir al login
+    window.location.href = '../../index.html';
+}
+
+// Función para llamadas API
+async function apiCall(endpoint, method = 'GET', data = null) {
+    const url = `${API_BASE_URL}/${endpoint}.php`;
+    
+    const options = {
+        method: method,
+        headers: {
+            'Content-Type': 'application/json',
+        }
+    };
+    
+    if (authToken) {
+        options.headers['Authorization'] = `Bearer ${authToken}`;
+    }
+    
+    if (data && (method === 'POST' || method === 'PUT')) {
+        options.body = JSON.stringify(data);
+    }
+    
+    try {
+        const response = await fetch(url, options);
+        
+        if (response.status === 401) {
+            logout();
+            return;
+        }
+        
+        return await response.json();
+    } catch (error) {
+        console.error('Error en API:', error);
+        return null;
+    }
+}
+
+// Inicializar cuando carga la página
+document.addEventListener('DOMContentLoaded', function() {
+    console.log('🏠 Iniciando portal de casa');
+    
+    // Cargar datos del usuario
+    const userData = localStorage.getItem('userData');
+    const token = localStorage.getItem('authToken');
+    
+    if (userData && token) {
+        currentUser = JSON.parse(userData);
+        authToken = token;
+        
+        // Mostrar nombre de la casa
+        const casaNameElement = document.getElementById('casa-name');
+        if (casaNameElement) {
+            casaNameElement.textContent = currentUser.casa_name || currentUser.username;
+        }
+        
+        // Funciones básicas
+        initCasaPortal();
+    } else {
+        window.location.href = '../../index.html';
+    }
+});
+
+function initCasaPortal() {
+    console.log('✅ Portal de casa inicializado');
+    
+    // Cargar productos (versión simple)
+    loadCasaData();
+    
+    // Configurar eventos básicos
+    setupCasaEvents();
+}
+
+function setupCasaEvents() {
+    // Por ahora solo configurar búsqueda básica
+    const searchInput = document.getElementById('product-search');
+    if (searchInput) {
+        searchInput.addEventListener('input', filterCasaProducts);
+    }
+}
+
+async function loadCasaData() {
+    try {
+        const productsResponse = await apiCall('inventory/products');
+        if (productsResponse && productsResponse.success) {
+            availableProducts = productsResponse.data;
+            renderProductsGrid();
+        }
+        
+        loadOrderHistory();
+        
+    } catch (error) {
+        console.error('Error cargando datos de la casa:', error);
+        showNotification('Error al cargar los datos', 'error');
+    }
+}
+
+function renderProductsGrid() {
+    const container = document.getElementById('products-grid');
+    if (!container) return;
+    
+    if (availableProducts.length === 0) {
+        container.innerHTML = `
+            <div style="grid-column: 1 / -1; text-align: center; padding: 40px;">
+                <i class="fas fa-box-open" style="font-size: 3rem; color: #9ca3af; margin-bottom: 16px;"></i>
+                <p style="color: #6b7280;">No hay productos disponibles para tu casa</p>
+            </div>
+        `;
+        return;
+    }
+    
+    container.innerHTML = availableProducts.slice(0, 10).map(product => `
+        <div class="product-card">
+            <div class="product-info">
+                <h3>${product.name}</h3>
+                <p>${product.description || ''}</p>
+                <div class="product-meta">
+                    <span class="product-price">$${product.unit_price}</span>
+                    <span class="product-stock">Stock: ${product.current_stock} ${product.unit}</span>
+                </div>
+                <div class="product-actions">
+                    <input type="number" value="1" min="1" max="${product.current_stock}" style="width: 60px; text-align: center;">
+                    <button class="btn btn-primary" onclick="addToCart(${product.id})" ${product.current_stock <= 0 ? 'disabled' : ''}>
+                        <i class="fas fa-cart-plus"></i>
+                        ${product.current_stock <= 0 ? 'Sin Stock' : 'Agregar'}
+                    </button>
+                </div>
+            </div>
+        </div>
+    `).join('');
+}
+
+// Funciones básicas del carrito
+function addToCart(productId) {
+    showNotification('Función de carrito disponible en versión completa');
+}
+
+function toggleCart() {
+    const cartSidebar = document.getElementById('cart-sidebar');
+    if (cartSidebar) {
+        cartSidebar.classList.toggle('open');
+    }
+}
+
+function clearCart() {
+    cart = [];
+    showNotification('Carrito limpiado');
+}
+
+function confirmOrder() {
+    showNotification('Función disponible en versión completa');
+}
+
+function filterCasaProducts() {
+    // Función simple de filtrado
+    console.log('Filtrado de productos');
+}
+
+async function loadOrderHistory() {
+    const container = document.getElementById('order-history');
+    if (container) {
+        container.innerHTML = '<p class="text-center">Cargando historial de pedidos...</p>';
+        
+        try {
+            const response = await apiCall('orders/list');
+            if (response && response.success && response.data.length > 0) {
+                container.innerHTML = response.data.slice(0, 5).map(order => `
+                    <div style="border: 1px solid #e5e7eb; border-radius: 8px; padding: 15px; margin-bottom: 15px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <span style="font-weight: 600;">#${order.order_number}</span>
+                            <span style="color: #6b7280; font-size: 14px;">${new Date(order.created_at).toLocaleDateString()}</span>
+                        </div>
+                        <div style="margin-top: 10px;">
+                            <span>${order.total_items} items - <strong>$${order.total_amount}</strong></span>
+                        </div>
+                    </div>
+                `).join('');
+            } else {
+                container.innerHTML = '<p class="text-center">No tienes pedidos aún</p>';
+            }
+        } catch (error) {
+            container.innerHTML = '<p class="text-center">Error al cargar historial</p>';
+        }
+    }
+}
+
+function refreshProducts() {
+    loadCasaData();
+    showNotification('Productos actualizados');
+}
+
+function refreshOrderHistory() {
+    loadOrderHistory();
+    showNotification('Historial actualizado');
+}
+
+function showNotification(message, type = 'success') {
+    alert(message); // Versión simple
+}
+
+function formatCurrency(amount) {
+    return new Intl.NumberFormat('es-CL', {
+        style: 'currency',
+        currency: 'CLP'
+    }).format(amount);
+}
+
+function downloadOrderPDF() {
+    showNotification('Función disponible en versión completa');
+}
+
+function closeModal() {
+    const modal = document.getElementById('order-confirmation-modal');
+    if (modal) {
+        modal.style.display = 'none';
+    }
+}
+</script>
+</body>
+</html>
+<body>
+    <div class="casa-app">
+        <!-- Header -->
+        <header class="casa-header">
+            <div class="header-content">
+                <div class="logo">
+                    <i class="fas fa-home"></i>
+                    <h1 id="casa-name">Casa</h1>
+                </div>
+                
+                <div class="header-actions">
+                    <button class="btn btn-icon" onclick="refreshProducts()">
+                        <i class="fas fa-sync-alt"></i>
+                    </button>
+                    <button class="btn btn-cart" onclick="toggleCart()">
+                        <i class="fas fa-shopping-cart"></i>
+                        <span class="cart-count" id="cart-count">0</span>
+                    </button>
+                    <button class="btn btn-danger" onclick="logout()">
+                        <i class="fas fa-sign-out-alt"></i>
+                        Salir
+                    </button>
+                </div>
+            </div>
+        </header>
+        
+        <!-- Main Content -->
+        <div class="casa-main">
+            <!-- Products Section -->
+            <div class="products-section">
+                <div class="section-header">
+                    <h2>Productos Disponibles</h2>
+                    <div class="filters">
+                        <input type="text" id="product-search" placeholder="Buscar productos..." 
+                               onkeyup="filterCasaProducts()">
+                        <select id="category-filter" onchange="filterCasaProducts()">
+                            <option value="">Todas las categorías</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <div id="products-grid" class="products-grid">
+                    <!-- Se carga dinámicamente -->
+                </div>
+            </div>
+            
+            <!-- Shopping Cart Sidebar -->
+            <div id="cart-sidebar" class="cart-sidebar">
+                <div class="cart-header">
+                    <h3>Mi Pedido</h3>
+                    <button class="btn btn-icon" onclick="toggleCart()">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+                
+                <div class="cart-body">
+                    <div id="cart-items" class="cart-items">
+                        <!-- Se llena dinámicamente -->
+                    </div>
+                    
+                    <div class="cart-summary">
+                        <div class="summary-row">
+                            <span>Total Items:</span>
+                            <span id="total-items">0</span>
+                        </div>
+                        <div class="summary-row total">
+                            <span>Total:</span>
+                            <span id="total-amount">$0.00</span>
+                        </div>
+                    </div>
+                    
+                    <div class="cart-notes">
+                        <label for="order-notes">Notas del pedido:</label>
+                        <textarea id="order-notes" placeholder="Comentarios adicionales..."></textarea>
+                    </div>
+                    
+                    <div class="cart-actions">
+                        <button class="btn btn-secondary" onclick="clearCart()">
+                            <i class="fas fa-trash"></i>
+                            Limpiar
+                        </button>
+                        <button class="btn btn-primary" onclick="confirmOrder()" id="confirm-order-btn">
+                            <i class="fas fa-check"></i>
+                            Confirmar Pedido
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Order History Section -->
+        <div class="order-history-section">
+            <div class="section-header">
+                <h2>Mis Pedidos</h2>
+                <button class="btn btn-secondary" onclick="refreshOrderHistory()">
+                    <i class="fas fa-refresh"></i>
+                    Actualizar
+                </button>
+            </div>
+            
+            <div id="order-history" class="order-history">
+                <!-- Se carga dinámicamente -->
+            </div>
+        </div>
+    </div>
+    
+    <!-- Order Confirmation Modal -->
+    <div id="order-confirmation-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header success">
+                <h3><i class="fas fa-check-circle"></i> Pedido Confirmado</h3>
+            </div>
+            <div class="modal-body">
+                <div class="confirmation-details">
+                    <p><strong>Número de Pedido:</strong> <span id="confirmed-order-number"></span></p>
+                    <p><strong>Total de Items:</strong> <span id="confirmed-total-items"></span></p>
+                    <p><strong>Monto Total:</strong> <span id="confirmed-total-amount"></span></p>
+                </div>
+                
+                <div class="confirmation-actions">
+                    <button class="btn btn-primary" onclick="downloadOrderPDF()">
+                        <i class="fas fa-download"></i>
+                        Descargar PDF
+                    </button>
+                    <button class="btn btn-secondary" onclick="closeModal('order-confirmation-modal')">
+                        Cerrar
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script src="../assets/js/app.js"></script>
+    <script src="../assets/js/orders.js"></script>
+</body>
+</html>
